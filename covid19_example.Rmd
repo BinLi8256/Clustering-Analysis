@@ -1,16 +1,25 @@
 ---
 title: "Subgroup Analysis Emperical Example - Covid19"
 author: "Bin Li"
-output: html_document
+knit: (function(input_file, encoding) {
+  out_dir <- 'docs';
+  rmarkdown::render(input_file,
+  encoding=encoding,
+  output_file=file.path(dirname(input_file), out_dir, 'index.html'))})
+output: 
+  html_document:
+    toc: true
+    number_section: true
+    theme: united
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-### Dataset
+# Dataset
 
-#### Monthly Covid-19 Data by State
+## Monthly Covid-19 Data by State
 ```{r, message=FALSE, warning=FALSE, echo=FALSE}
 setwd("/Volumes/LI/MU/MasterProject/Code/11.04")
 source("simspatial.R")
@@ -59,7 +68,7 @@ head(confirmed.state.month)
 #growth.rate(covid.us)
 ```
 
-#### Monthly vaccination rate by state
+## Monthly vaccination rate by state
 ```{r, message=FALSE, warning=FALSE, echo=FALSE}
 library(covid19.analytics)
 `%notin%` = Negate(`%in%`)
@@ -87,7 +96,7 @@ head(vaccination.state)
 
 
 
-#### Monthly unemployment rate by state
+## Monthly unemployment rate by state
 ```{r, message=FALSE, warning=FALSE, echo=FALSE}
 # unemployment rate
 unemployment = readxl::read_excel ("/Volumes/LI/MU/MasterProject/ststdsadata.xlsx", sheet = "Sheet1")
@@ -109,7 +118,7 @@ income = readxl::read_excel ("/Volumes/LI/MU/MasterProject/ststdsadata.xlsx", sh
 ```
 
 
-#### Join all data together
+## Join all data together
 ```{r, message=FALSE, warning=FALSE, echo=FALSE}
 # confirmed + vaccination
 data.all = left_join(confirmed.state.month, vaccination.state, by = c("state.ab" = "state.ab", "YearMonth" = "YearMonth"))
@@ -139,7 +148,7 @@ colnames(data.all)[10] = "Average_Income"
 head(data.all)
 ```
 
-#### Plots for vaccination rate and unemployment rate
+## Plots for vaccination rate and unemployment rate
 ```{r, fig.height=12, fig.width=10, message=FALSE, warning=FALSE}
 library(ggplot2)
 ggplot() +
@@ -160,9 +169,9 @@ ggplot() +
 
 ```
 
-### Model
+# Model
 
-#### Data preparation
+## Data preparation
 ```{r, message=FALSE, warning=FALSE}
 # remove Hawaii and Alaska
 data.all = data.all %>% filter( state.ab != "AK", state.ab != "HI" )
@@ -186,7 +195,7 @@ vac = scale(data.all$vac_rate)
 x2 = cbind(data.all$int, vac, scale(as.matrix(data.all[,c(7)])))
 ```
 
-#### Equal weights
+## Equal weights
 ```{r, message=FALSE, warning=FALSE}
 # Equal weight
 wt <- rep(1, length(unique(data.all$Province_State))*(length(unique(data.all$Province_State))-1)/2)
@@ -222,10 +231,10 @@ plot(lamvec.int, BICvalue1.int)
 ```
 
 
-#### Unequal weights
+## Unequal weights
 ```{r, message=FALSE, warning=FALSE}
 # load weights data
-load("/Users/BinLi/Downloads/order.mat.RData")
+load("/Volumes/LI/MU/MasterProject/order.mat.RData")
 #x2 = cbind(data.all$int, vac)
 betam0.wt <- cal_initialr(indexy = indexy, y = y, z = z2, x = x2)
 
@@ -270,7 +279,7 @@ res1.int.wt$group
 <br>
 <br>
 
-### Visualization
+# Visualization
 
 **Plot for intercept**
 ```{r, message=FALSE, warning=FALSE, fig.height = 8, fig.width=20}
@@ -372,6 +381,10 @@ ggarrange(p1, p2)
 ```
 
 
+<br>
+<br>
+<br>
+<br>
 
 
 
