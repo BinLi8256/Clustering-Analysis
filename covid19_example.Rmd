@@ -90,7 +90,7 @@ head(vaccination.state)
 #### Monthly unemployment rate by state
 ```{r, message=FALSE, warning=FALSE, echo=FALSE}
 # unemployment rate
-unemployment = readxl::read_excel ("/Users/BinLi/Desktop/MasterProject/ststdsadata.xlsx", sheet = "Sheet1")
+unemployment = readxl::read_excel ("/Volumes/LI/MU/MasterProject/ststdsadata.xlsx", sheet = "Sheet1")
 
 unemployment = unemployment %>% 
   mutate(state.ab = state.abb[match(State, state.name)],
@@ -98,13 +98,13 @@ unemployment = unemployment %>%
   drop_na()
 
 # Political party by state
-party = readxl::read_excel ("/Users/BinLi/Desktop/MasterProject/ststdsadata.xlsx", sheet = "Sheet2")
+party = readxl::read_excel ("/Volumes/LI/MU/MasterProject/ststdsadata.xlsx", sheet = "Sheet2")
 
 # Population by state
-population = readxl::read_excel ("/Users/BinLi/Desktop/MasterProject/ststdsadata.xlsx", sheet = "Sheet3")
+population = readxl::read_excel ("/Volumes/LI/MU/MasterProject/ststdsadata.xlsx", sheet = "Sheet3")
 
 # Average household income by state
-income = readxl::read_excel ("/Users/BinLi/Desktop/MasterProject/ststdsadata.xlsx", sheet = "Sheet4")
+income = readxl::read_excel ("/Volumes/LI/MU/MasterProject/ststdsadata.xlsx", sheet = "Sheet4")
 
 ```
 
