@@ -1,0 +1,377 @@
+---
+title: "Subgroup Analysis Emperical Example - Covid19"
+author: "Bin Li"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Dataset
+
+#### Monthly Covid-19 Data by State
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+setwd("/Volumes/LI/MU/MasterProject/Code/11.04")
+source("simspatial.R")
+source("avgBeta.R")
+source("BICs.R")
+library(Spgr)
+library(flexclust)
+library(lubridate)
+library(stringr)
+library(tidyverse)
+library(ggthemes)
+#Sys.setlocale("LC_TIME", "English")
+options(scipen = 999)
+
+confirmed_origin <- read.csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv")
+
+confirmed <- confirmed_origin %>% 
+  filter(iso2 == "US") %>% 
+  gather(key="Date", value="cases",-1:-11) %>% 
+  mutate(Date=mdy(str_replace_all(Date,c("X"=""))),
+         Province_State=tolower(Province_State),
+         Admin2 = tolower(Admin2))
+
+#View(confirmed)
+
+confirmed.state <- confirmed %>% 
+  group_by(Province_State,Date) %>% 
+  summarise(n=sum(cases)) 
+
+#View(confirmed.state)
+
+# Monthly average case
+confirmed.state$Province_State = str_to_title(confirmed.state$Province_State)
+confirmed.state$YearMonth = format(confirmed.state$Date, "%Y-%m")
+
+confirmed.state.month =  confirmed.state %>% 
+  group_by(Province_State,YearMonth) %>% 
+  mutate(state.ab = state.abb[match(Province_State, state.name)]) %>% 
+  filter(Date == max(Date))
+
+head(confirmed.state.month)
+
+
+#covid.us = covid19.US.data(local.data = TRUE, debrief = FALSE, acknowledge = FALSE)
+#head(covid.us)
+#growth.rate(covid.us)
+```
+
+#### Monthly vaccination rate by state
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+library(covid19.analytics)
+`%notin%` = Negate(`%in%`)
+
+vaccination = covid19.vaccination(tgt = "us")
+head(vaccination)
+#View(vaccination)
+vaccination.state = vaccination %>% select(date, location, people_fully_vaccinated) %>% 
+  drop_na() %>% 
+  mutate(YearMonth = substr(date, start = 1, stop = 7),
+         location = ifelse(location == "New York State", "New York", location)) %>% 
+  group_by(location, YearMonth) %>% 
+  summarise(people_fully_vaccinated = max(people_fully_vaccinated)) %>% 
+  filter(location %notin% c("American Samoa", "Bureau of Prisons", "Dept of Defense", "District of Columbia", 
+                            "Federated States of Micronesia", "Guam", "Indian Health Svc", "Long Term Care", 
+                            "Marshall Islands", "Northern Mariana Island", "Puerto Rico", "Republic of Palau",
+                            "United States", "Veterans Health", "Virgin Islands", "Northern Mariana Islands")) %>% 
+  mutate(state.ab = state.abb[match(location, state.name)])
+
+
+
+#unique(vaccination.state$location)
+head(vaccination.state)
+```
+
+
+
+#### Monthly unemployment rate by state
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+# unemployment rate
+unemployment = readxl::read_excel ("/Users/BinLi/Desktop/MasterProject/ststdsadata.xlsx", sheet = "Sheet1")
+
+unemployment = unemployment %>% 
+  mutate(state.ab = state.abb[match(State, state.name)],
+         YearMonth = str_c(Year, "-", Month)) %>% 
+  drop_na()
+
+# Political party by state
+party = readxl::read_excel ("/Users/BinLi/Desktop/MasterProject/ststdsadata.xlsx", sheet = "Sheet2")
+
+# Population by state
+population = readxl::read_excel ("/Users/BinLi/Desktop/MasterProject/ststdsadata.xlsx", sheet = "Sheet3")
+
+# Average household income by state
+income = readxl::read_excel ("/Users/BinLi/Desktop/MasterProject/ststdsadata.xlsx", sheet = "Sheet4")
+
+```
+
+
+#### Join all data together
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+# confirmed + vaccination
+data.all = left_join(confirmed.state.month, vaccination.state, by = c("state.ab" = "state.ab", "YearMonth" = "YearMonth"))
+
+# confirmed + vaccination + unemployment rate
+data.all = left_join(data.all, unemployment, by  = c("state.ab" = "state.ab", "YearMonth" = "YearMonth"))
+
+# confirmed + vaccination + unemployment rate + party
+data.all = left_join(data.all, party, by = c("Province_State" = "State"))
+
+# confirmed + vaccination + unemployment rate + party + population
+data.all = left_join(data.all, population, by = c("Province_State" = "State"))
+
+# confirmed + vaccination + unemployment rate + party + population + income
+data.all = left_join(data.all, income, by = c("Province_State" = "State"))
+data.all$location = data.all$State = data.all$Year = data.all$Month = data.all$Percent_of_Total = NULL
+#View(data.all)
+
+# case rate and full vaccinated rate
+data.all = data.all %>% 
+  group_by(Province_State) %>% 
+  mutate(case_rate = (n / Pop_Est * 100) ,
+         vac_rate = (people_fully_vaccinated / Pop_Est * 100)) %>% 
+  drop_na()
+
+colnames(data.all)[10] = "Average_Income"
+head(data.all)
+```
+
+#### Plots for vaccination rate and unemployment rate
+```{r, fig.height=12, fig.width=10, message=FALSE, warning=FALSE}
+library(ggplot2)
+ggplot() +
+  geom_jitter(aes(x = vac_rate, y = case_rate, color = state.ab), data = data.all) +
+  facet_wrap(~YearMonth, nrow = 5) +
+  theme_bw() +
+  labs(title = "Vaccination complete rate -- case rate") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+ggplot() +
+  geom_jitter(aes(x = Unemployment_rate, y = case_rate, color = state.ab), data = data.all) +
+  facet_wrap(~YearMonth, nrow = 5) +
+  theme_bw() +
+  labs(title = "Unemployment_rate -- case rate") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+```
+
+### Model
+
+#### Data preparation
+```{r, message=FALSE, warning=FALSE}
+# remove Hawaii and Alaska
+data.all = data.all %>% filter( state.ab != "AK", state.ab != "HI" )
+data.all$Party_d = ifelse(data.all$Party == "Republican", 1, 2)
+
+data.all$indexy = rep(1:length(unique(data.all$Province_State)), each = nrow(data.all)/length(unique(data.all$Province_State)))
+data.all$int = rep(1, nrow(data.all))
+
+
+# Z:  average income, party
+z2 = cbind(scale(as.matrix(data.all[,c(10)])), data.all$Party_d) 
+
+# Index
+indexy = data.all$indexy
+
+# Y
+y = scale(data.all$case_rate)
+
+# X: intercept, vac_rate, unemployment rate
+vac = scale(data.all$vac_rate)
+x2 = cbind(data.all$int, vac, scale(as.matrix(data.all[,c(7)])))
+```
+
+#### Equal weights
+```{r, message=FALSE, warning=FALSE}
+# Equal weight
+wt <- rep(1, length(unique(data.all$Province_State))*(length(unique(data.all$Province_State))-1)/2)
+
+# beta
+betam0.int <- cal_initialr(indexy = indexy, y = y, z = z2, x = x2)
+
+# tune lambda
+lamvec.int = seq(0,1,by = 0.01)
+BICvalue1.int <- rep(0,length(lamvec.int))
+  
+for(j in 1:length(lamvec.int)){
+    ### method 1
+    res1j.int <- Spgrwise_rep_scad(indexy = indexy, y = y, z = z2, x=x2,
+                               weights = wt, betam0 = betam0.int, lam = lamvec.int[j])
+    betaavg1j.int <- avgBeta(betamest = res1j.int$beta, groupest = res1j.int$group)
+    BICvalue1.int[j] <- BICrep(indexy = indexy, y = y, z = z2, x= x2,
+                           etaest = res1j.int$eta, betaavg = betaavg1j.int, groupest = res1j.int$group)
+}
+  
+### refit###
+res1.int <- Spgrwise_rep_scad(indexy = indexy, y = y, z = z2, x=x2,
+                            weights = wt,betam0 = betam0.int,lam = lamvec.int[which.min(BICvalue1.int)])
+
+
+res1.int$group
+#res1.int$beta
+#res1.int$eta
+
+# lambda VS BIC
+plot(lamvec.int, BICvalue1.int)
+
+```
+
+
+#### Unequal weights
+```{r, message=FALSE, warning=FALSE}
+# load weights data
+load("/Users/BinLi/Downloads/order.mat.RData")
+#x2 = cbind(data.all$int, vac)
+betam0.wt <- cal_initialr(indexy = indexy, y = y, z = z2, x = x2)
+
+# tune both lambda and alpha
+lamvec.wt = seq(0,1,by = 0.01)
+alpvec.wt <- seq(0,2,by = 0.1)
+BICvalue1 <- matrix(0, length(lamvec.wt), length(alpvec.wt))
+
+for(l in 1:length(alpvec.wt)){
+  
+  wt.wt <- exp(alpvec.wt[l]*(1- order.mat[lower.tri(order.mat)]))
+  
+  for(j in 1:length(lamvec.wt))
+  {
+    ### method 1 coordinate group, with scad penalty
+    res1j.int.wt <- Spgrwise_rep_scad(indexy = indexy, y = y, z = z2, x=x2,
+                               weights = wt.wt, betam0 = betam0.wt, lam = lamvec.wt[j])
+    betaavg1j.int.wt <- avgBeta(betamest = res1j.int.wt$beta, groupest = res1j.int.wt$group)
+    BICvalue1[j,l] <- BICrep(indexy = indexy, y = y, z = z2, x= x2,
+                           etaest = res1j.int.wt$eta,betaavg =  betaavg1j.int.wt, groupest = res1j.int.wt$group)
+  }
+}
+
+# optimal lambda and alpha under best BIC
+lam.opt = lamvec.wt[which(BICvalue1 == min(BICvalue1),arr.ind = TRUE)[1]]
+alp.opt = alpvec.wt[which(BICvalue1 == min(BICvalue1),arr.ind = TRUE)[2]]
+
+# optimal weights
+wt.opt = exp(alp.opt*(1- order.mat[lower.tri(order.mat)]))
+  
+### refit###
+res1.int.wt <- Spgrwise_rep_scad(indexy = indexy, y = y, z = z2, x=x2,
+                            weights = wt.opt, betam0 = betam0.wt, lam = lam.opt)
+
+
+res1.int.wt$group
+#res1.int.wt$beta
+#res1.int.wt$eta
+
+
+```
+<br>
+<br>
+
+### Visualization
+
+**Plot for intercept**
+```{r, message=FALSE, warning=FALSE, fig.height = 8, fig.width=20}
+library(tidyverse)
+
+us_states <- map_data("state")
+stateabb <- data.frame(abb = state.abb, state = state.name)
+stateabb$state <-tolower(stateabb$state)
+stateabb = stateabb %>% filter(abb %notin% c("AK", "HI"))
+
+# equal weights
+dat1 <- data.frame(abb = stateabb$abb, estgroup = res1.int$group[,1], replace = TRUE)
+
+us_states_test <- us_states %>% left_join(stateabb, by = c("region"="state")) %>%
+  left_join(dat1) %>% drop_na(estgroup)
+
+p1 <- ggplot(data = us_states_test,
+            mapping = aes(x = long, y = lat, group = group, fill = as.factor(estgroup)))
+
+p1 = p1 + geom_polygon(color = "gray90", size = 0.1) + labs(title = "Equal weight: intercept") +
+  guides(fill=guide_legend(title="est group "))
+
+
+# unequal weights
+dat2 <- data.frame(abb = stateabb$abb, estgroup = res1.int.wt$group[,1], replace = TRUE)
+
+us_states_test <- us_states %>% left_join(stateabb, by = c("region"="state")) %>%
+  left_join(dat2) %>% drop_na(estgroup)
+
+p2 <- ggplot(data = us_states_test,
+            mapping = aes(x = long, y = lat, group = group, fill = as.factor(estgroup)))
+
+p2 = p2 + geom_polygon(color = "gray90", size = 0.1) + labs(title = "Unequal weights: intercept") +
+  guides(fill=guide_legend(title="est group "))
+
+library(ggpubr)
+ggarrange(p1, p2)
+```
+
+**Plot for vax_rate**
+```{r, message=FALSE, warning=FALSE, fig.height = 8, fig.width=20}
+# equal weights
+dat1 <- data.frame(abb = stateabb$abb, estgroup = res1.int$group[,2], replace = TRUE)
+
+us_states_test <- us_states %>% left_join(stateabb, by = c("region"="state")) %>%
+  left_join(dat1) %>% drop_na(estgroup)
+
+p1 <- ggplot(data = us_states_test,
+            mapping = aes(x = long, y = lat, group = group, fill = as.factor(estgroup)))
+
+p1 = p1 + geom_polygon(color = "gray90", size = 0.1) + labs(title = "Equal weight: vax rate") +
+  guides(fill=guide_legend(title="est group "))
+
+
+# unequal weights
+dat2 <- data.frame(abb = stateabb$abb, estgroup = res1.int.wt$group[,2], replace = TRUE)
+
+us_states_test <- us_states %>% left_join(stateabb, by = c("region"="state")) %>%
+  left_join(dat2) %>% drop_na(estgroup)
+
+p2 <- ggplot(data = us_states_test,
+            mapping = aes(x = long, y = lat, group = group, fill = as.factor(estgroup)))
+
+p2 = p2 + geom_polygon(color = "gray90", size = 0.1) + labs(title = "Unequal weights: vax rate") +
+  guides(fill=guide_legend(title="est group "))
+
+library(ggpubr)
+ggarrange(p1, p2)
+```
+
+
+**Plot for unemployment rate**
+```{r, message=FALSE, warning=FALSE, fig.height = 8, fig.width=20}
+# equal weights
+dat1 <- data.frame(abb = stateabb$abb, estgroup = res1.int$group[,3], replace = TRUE)
+
+us_states_test <- us_states %>% left_join(stateabb, by = c("region"="state")) %>%
+  left_join(dat1) %>% drop_na(estgroup)
+
+p1 <- ggplot(data = us_states_test,
+            mapping = aes(x = long, y = lat, group = group, fill = as.factor(estgroup)))
+
+p1 = p1 + geom_polygon(color = "gray90", size = 0.1) + labs(title = "Equal weight: unemployement rate")
+
+
+# unequal weights
+dat2 <- data.frame(abb = stateabb$abb, estgroup = res1.int.wt$group[,3], replace = TRUE)
+
+us_states_test <- us_states %>% left_join(stateabb, by = c("region"="state")) %>%
+  left_join(dat2) %>% drop_na(estgroup)
+
+p2 <- ggplot(data = us_states_test,
+            mapping = aes(x = long, y = lat, group = group, fill = as.factor(estgroup)))
+
+p2 = p2 + geom_polygon(color = "gray90", size = 0.1) + labs(title = "Unequal weights: unemployment rate")
+
+library(ggpubr)
+ggarrange(p1, p2)
+```
+
+
+
+
+
